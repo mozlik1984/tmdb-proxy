@@ -1,38 +1,40 @@
 from http.server import BaseHTTPRequestHandler
 import requests
+import json
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # --- Бронированная склейка токена (v9.2-GLOBAL) ---
-        p1 = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3ODY4NWUxMzYzZTc3NjUxMDNjODA5OThmNDg0MTYwMyIsInN1YiI6IjY2MTAwYmUyZGEyOTFhMDE2MzhhYjYwNiIsInNjcCI6WyJhcGlfcmVhZCJdLCJ2ZXIiOjF9"
-        p2 = "."
-        p3 = "yX7-U_vNf_r9C8mI5_v2R7mN9eR0W4h8I3Y2W9L1U_8"
+        # --- Вшитый токен (v9.3-FINAL) ---
+        TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3ODY4NWUxMzYzZTc3NjUxMDNjODA5OThmNDg0MTYwMyIsInN1YiI6IjY2MTAwYmUyZGEyOTFhMDE2MzhhYjYwNiIsInNjcCI6WyJhcGlfcmVhZCJdLCJ2ZXIiOjF9.yX7-U_vNf_r9C8mI5_v2R7mN9eR0W4h8I3Y2W9L1U_8"
         
-        # Склеиваем и жестко вычищаем пробелы и переносы строк
-        token = (p1 + p2 + p3).strip().replace("\n", "").replace("\r", "")
+        # 1. Очищаем путь от префикса /api, который добавляет Vercel
+        path = self.path.replace('/api', '')
         
-        # Формируем путь (убираем /api, оставляем остальное как есть)
-        clean_path = self.path.replace('/api', '')
-        # Оставляем язык по умолчанию (English) или как придет в запросе
-        tmdb_url = f"https://themoviedb.org{clean_path}"
+        # 2. Если путь пустой, по умолчанию запрашиваем Бойцовский клуб (ID: 550) для теста
+        if not path or path == "/":
+            target_url = "https://themoviedb.org"
+        else:
+            # Иначе пробрасываем запрос как есть к API v3
+            target_url = f"https://themoviedb.org{path}"
 
         headers = {
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {TOKEN}",
             "Content-Type": "application/json;charset=utf-8"
         }
 
         try:
-            # Проксируем запрос на серверы TMDB (в США/Европе)
-            response = requests.get(tmdb_url, headers=headers)
+            # Делаем запрос к TMDB
+            response = requests.get(target_url, headers=headers)
             
-            # Отдаем результат боту на Amvera
+            # Отправляем ответ клиенту
             self.send_response(response.status_code)
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*') # Разрешаем CORS
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*') # Для работы с любыми доменами
             self.end_headers()
             self.wfile.write(response.content)
             
         except Exception as e:
             self.send_response(500)
             self.end_headers()
-            self.wfile.write(f"Proxy Error: {str(e)}".encode())
+            error_msg = {"error": "Proxy Error", "details": str(e)}
+            self.wfile.write(json.dumps(error_msg).encode())
