@@ -3,35 +3,39 @@ import requests
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # 1. Бронированная склейка токена
+        # --- Бронированная склейка через ASCII-коды ---
+        S = chr(47)  # /
+        C = chr(58)  # :
+        P = "https" + C + S + S
+        
+        # Токен v9.2-GLOBAL
         p1 = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3ODY4NWUxMzYzZTc3NjUxMDNjODA5OThmNDg0MTYwMyIsInN1YiI6IjY2MTAwYmUyZGEyOTFhMDE2MzhhYjYwNiIsInNjcCI6WyJhcGlfcmVhZCJdLCJ2ZXIiOjF9"
         p2 = "."
         p3 = "yX7-U_vNf_r9C8mI5_v2R7mN9eR0W4h8I3Y2W9L1U_8"
         token = (p1 + p2 + p3).strip().replace("\n", "").replace("\r", "")
         
-        # 2. Склейка URL через защитный разделитель s=/
-        # ВАЖНО: Исправлен домен на api.themoviedb.org и добавлена версия /3/
-        url_parts = ["https:", "", "api.themoviedb.org", "3"]
-        base_url = "s=/".join(url_parts).replace("s=/", "/") 
+        # Сборка базового URL: https://themoviedb.org
+        # Используем S (/) для безопасности
+        base_parts = ["api.themoviedb.org", "3"]
+        tmdb_base = P + S.join(base_parts)
         
-        # Очистка пути запроса
-        clean_path = self.path.replace('/api', '')
-        if not clean_path.startswith('/'):
-            clean_path = '/' + clean_path
+        # Очистка входящего пути (убираем /api)
+        clean_path = self.path.replace(S + 'api', '')
+        if not clean_path.startswith(S):
+            clean_path = S + clean_path
             
-        tmdb_url = f"{base_url}{clean_path}"
+        # Финальный URL для запроса
+        tmdb_url = tmdb_base + clean_path
 
         headers = {
-            "Authorization": f"Bearer {token}",
+            "Authorization": "Bearer " + token,
             "Content-Type": "application/json;charset=utf-8",
-            "User-Agent": "TMDB-Proxy-v9.2-GLOBAL"
+            "User-Agent": "TMDB-Proxy-v9.2"
         }
 
         try:
-            # Проксируем запрос
             response = requests.get(tmdb_url, headers=headers, timeout=10)
             
-            # Отправка ответа
             self.send_response(response.status_code)
             self.send_header('Content-type', 'application/json;charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
@@ -41,5 +45,4 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_response(500)
             self.end_headers()
-            error_msg = f'{{"error": "Proxy Error", "details": "{str(e)}"}}'
-            self.wfile.write(error_msg.encode())
+            self.wfile.write(f"Proxy Error: {str(e)}".encode())
