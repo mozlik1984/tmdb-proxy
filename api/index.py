@@ -1,40 +1,45 @@
 from http.server import BaseHTTPRequestHandler
 import requests
-import json
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # --- Вшитый токен (v9.3-FINAL) ---
-        TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3ODY4NWUxMzYzZTc3NjUxMDNjODA5OThmNDg0MTYwMyIsInN1YiI6IjY2MTAwYmUyZGEyOTFhMDE2MzhhYjYwNiIsInNjcCI6WyJhcGlfcmVhZCJdLCJ2ZXIiOjF9.yX7-U_vNf_r9C8mI5_v2R7mN9eR0W4h8I3Y2W9L1U_8"
+        # 1. Бронированная склейка токена
+        p1 = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3ODY4NWUxMzYzZTc3NjUxMDNjODA5OThmNDg0MTYwMyIsInN1YiI6IjY2MTAwYmUyZGEyOTFhMDE2MzhhYjYwNiIsInNjcCI6WyJhcGlfcmVhZCJdLCJ2ZXIiOjF9"
+        p2 = "."
+        p3 = "yX7-U_vNf_r9C8mI5_v2R7mN9eR0W4h8I3Y2W9L1U_8"
+        token = (p1 + p2 + p3).strip().replace("\n", "").replace("\r", "")
         
-        # 1. Очищаем путь от префикса /api, который добавляет Vercel
-        path = self.path.replace('/api', '')
+        # 2. Склейка URL через защитный разделитель s=/
+        # ВАЖНО: Исправлен домен на api.themoviedb.org и добавлена версия /3/
+        url_parts = ["https:", "", "api.themoviedb.org", "3"]
+        base_url = "s=/".join(url_parts).replace("s=/", "/") 
         
-        # 2. Если путь пустой, по умолчанию запрашиваем Бойцовский клуб (ID: 550) для теста
-        if not path or path == "/":
-            target_url = "https://themoviedb.org"
-        else:
-            # Иначе пробрасываем запрос как есть к API v3
-            target_url = f"https://themoviedb.org{path}"
+        # Очистка пути запроса
+        clean_path = self.path.replace('/api', '')
+        if not clean_path.startswith('/'):
+            clean_path = '/' + clean_path
+            
+        tmdb_url = f"{base_url}{clean_path}"
 
         headers = {
-            "Authorization": f"Bearer {TOKEN}",
-            "Content-Type": "application/json;charset=utf-8"
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json;charset=utf-8",
+            "User-Agent": "TMDB-Proxy-v9.2-GLOBAL"
         }
 
         try:
-            # Делаем запрос к TMDB
-            response = requests.get(target_url, headers=headers)
+            # Проксируем запрос
+            response = requests.get(tmdb_url, headers=headers, timeout=10)
             
-            # Отправляем ответ клиенту
+            # Отправка ответа
             self.send_response(response.status_code)
-            self.send_header('Content-type', 'application/json; charset=utf-8')
-            self.send_header('Access-Control-Allow-Origin', '*') # Для работы с любыми доменами
+            self.send_header('Content-type', 'application/json;charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(response.content)
             
         except Exception as e:
             self.send_response(500)
             self.end_headers()
-            error_msg = {"error": "Proxy Error", "details": str(e)}
-            self.wfile.write(json.dumps(error_msg).encode())
+            error_msg = f'{{"error": "Proxy Error", "details": "{str(e)}"}}'
+            self.wfile.write(error_msg.encode())
